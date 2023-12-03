@@ -1,7 +1,7 @@
 package main
 
-import "fmt"
-
 func main() {
-	fmt.Println("Hello world")
+	AllTasks()
+	server := NewApíServer(":3030")
+	server.Run()
 }
