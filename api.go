@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -50,7 +52,7 @@ func (s *APIServer) Run() {
 	router.HandleFunc("/", homePage).Methods("GET")
 	router.HandleFunc("/gettasks", getTasks).Methods("GET")
 	router.HandleFunc("/gettask/{id}", getTask).Methods("GET")
-	router.HandleFunc("/create", createTask).Methods("POST")
+	router.HandleFunc("/create", MakeHttpHandlerHelper(s.createTask))
 	router.HandleFunc("/delete/{id}", deleteTask).Methods("DELETE")
 	router.HandleFunc("/update/{id}", updateTask).Methods("PUT")
 
@@ -101,8 +103,21 @@ func getTask(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
-func createTask(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Endpoint da home page")
+func (s *APIServer) createTask(w http.ResponseWriter, r *http.Request) error {
+
+	if r.Method != "POST" {
+		return fmt.Errorf("Método de request não permitido")
+	}
+
+	var task Tasks
+	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
+		return err
+	}
+	task.ID = rand.Intn(1000)
+	tasks = append(tasks, task) // tá só fazendo append na task existente
+
+	fmt.Println(tasks)
+	return WriteJsonHelper(w, http.StatusOK, task)
 }
 
 func deleteTask(w http.ResponseWriter, r *http.Request) {
