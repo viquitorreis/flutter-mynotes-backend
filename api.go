@@ -4,47 +4,49 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"math/rand"
 	"net/http"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/gorilla/mux"
 )
 
 type APIServer struct {
 	listenAddr string
+	store      Storage
 }
 
-var tasks []Tasks
+var tasks []Task
 
-func NewApíServer(listenAddr string) *APIServer {
+func NewApíServer(listenAddr string, store Storage) *APIServer {
 	return &APIServer{
 		listenAddr: listenAddr,
+		store:      store,
 	}
 }
 
-func AllTasks() {
-	locationTime, err := GetBrazilCurrentTimeHelper()
-	if err != nil {
-		fmt.Printf("Error getting time in Brazil %s", err)
-	}
+// func AllTasks() {
+// 	locationTime, err := GetBrazilCurrentTimeHelper()
+// 	if err != nil {
+// 		fmt.Printf("Error getting time in Brazil %s", err)
+// 	}
 
-	task := Tasks{
-		ID:         1,
-		TaskName:   "Ler",
-		TaskDetail: "Ler 10 páginas do livro hoje",
-		Date:       locationTime,
-	}
+// 	task := Task{
+// 		ID:         1,
+// 		TaskName:   "Ler",
+// 		TaskDetail: "Ler 10 páginas do livro hoje",
+// 		Date:       locationTime,
+// 	}
 
-	task2 := Tasks{
-		ID:         2,
-		TaskName:   "Desenvolver",
-		TaskDetail: "Desenvolver o app",
-		Date:       locationTime,
-	}
+// 	task2 := Task{
+// 		ID:         2,
+// 		TaskName:   "Desenvolver",
+// 		TaskDetail: "Desenvolver o app",
+// 		Date:       locationTime,
+// 	}
 
-	tasks = append(tasks, task, task2)
-	fmt.Println(tasks)
-}
+// 	tasks = append(tasks, task, task2)
+// 	fmt.Println(tasks)
+// }
 
 func (s *APIServer) Run() {
 	router := mux.NewRouter()
@@ -52,7 +54,7 @@ func (s *APIServer) Run() {
 	router.HandleFunc("/", homePage).Methods("GET")
 	router.HandleFunc("/gettasks", getTasks).Methods("GET")
 	router.HandleFunc("/gettask/{id}", getTask).Methods("GET")
-	router.HandleFunc("/create", MakeHttpHandlerHelper(s.createTask))
+	router.HandleFunc("/create", MakeHttpHandlerHelper(s.handleCreateTask))
 	router.HandleFunc("/delete/{id}", deleteTask).Methods("DELETE")
 	router.HandleFunc("/update/{id}", updateTask).Methods("PUT")
 
@@ -103,21 +105,36 @@ func getTask(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
-func (s *APIServer) createTask(w http.ResponseWriter, r *http.Request) error {
+func (s *APIServer) handleCreateTask(w http.ResponseWriter, r *http.Request) error {
 
 	if r.Method != "POST" {
 		return fmt.Errorf("Método de request não permitido")
 	}
 
-	var task Tasks
-	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
+	createTaskReq := CreateTaskReq{}
+	if err := json.NewDecoder(r.Body).Decode(&createTaskReq); err != nil {
 		return err
 	}
-	task.ID = rand.Intn(1000)
-	tasks = append(tasks, task) // tá só fazendo append na task existente
 
-	fmt.Println(tasks)
-	return WriteJsonHelper(w, http.StatusOK, task)
+	validate := validator.New()
+	err := validate.Struct(createTaskReq)
+	if err != nil {
+		errMsg := fmt.Errorf("Not all fields were given %s: ", err)
+		fmt.Println(errMsg)
+		return WriteJsonHelper(w, http.StatusBadRequest, ApiError{Error: errMsg.Error()})
+
+	}
+
+	newTask, err := NewTask(createTaskReq.TaskName, createTaskReq.TaskDetail)
+	if err != nil {
+		return err
+	}
+
+	if err := s.store.CreateTask(newTask); err != nil {
+		return err
+	}
+
+	return WriteJsonHelper(w, http.StatusOK, newTask)
 }
 
 func deleteTask(w http.ResponseWriter, r *http.Request) {
