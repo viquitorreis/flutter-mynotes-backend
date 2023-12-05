@@ -12,6 +12,8 @@ import (
 
 type Storage interface {
 	CreateTask(*Task) error
+	GetTasks() ([]*Task, error)
+	GetTask(string) (*Task, error)
 }
 
 type PostgresStore struct {
@@ -58,8 +60,6 @@ func (s *PostgresStore) CreateTask(task *Task) error {
 		values ($1, $2, $3, $4)
 	`
 
-	fmt.Println("task =>", task)
-
 	_, err := s.db.Query(
 		query,
 		task.TaskName,
@@ -73,4 +73,59 @@ func (s *PostgresStore) CreateTask(task *Task) error {
 	}
 
 	return nil
+}
+
+func (s *PostgresStore) GetTasks() ([]*Task, error) {
+	rows, err := s.db.Query(`select * from tasks;`)
+	if err != nil {
+		return nil, err
+	}
+
+	tasks := []*Task{}
+	for rows.Next() {
+		task, err := ScanIntoTasks(rows)
+		if err != nil {
+			return nil, err
+		}
+
+		tasks = append(tasks, task)
+	}
+
+	return tasks, nil
+}
+
+func (s *PostgresStore) GetTask(id string) (*Task, error) {
+	query := `select * from tasks where id = $1`
+	rows, err := s.db.Query(
+		query,
+		id,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	for rows.Next() {
+		task, err := ScanIntoTasks(rows)
+		if err != nil {
+			return nil, err
+		}
+
+		return task, nil
+	}
+
+	notFoundErr := fmt.Errorf("Task não encontrada")
+	return nil, notFoundErr
+}
+
+func ScanIntoTasks(rows *sql.Rows) (*Task, error) {
+	task := &Task{}
+	err := rows.Scan(
+		&task.ID,
+		&task.TaskName,
+		&task.TaskDetail,
+		&task.CreatedAt,
+		&task.UpdatedAt,
+	)
+
+	return task, err
 }

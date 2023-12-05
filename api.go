@@ -15,8 +15,6 @@ type APIServer struct {
 	store      Storage
 }
 
-var tasks []Task
-
 func NewApíServer(listenAddr string, store Storage) *APIServer {
 	return &APIServer{
 		listenAddr: listenAddr,
@@ -24,36 +22,12 @@ func NewApíServer(listenAddr string, store Storage) *APIServer {
 	}
 }
 
-// func AllTasks() {
-// 	locationTime, err := GetBrazilCurrentTimeHelper()
-// 	if err != nil {
-// 		fmt.Printf("Error getting time in Brazil %s", err)
-// 	}
-
-// 	task := Task{
-// 		ID:         1,
-// 		TaskName:   "Ler",
-// 		TaskDetail: "Ler 10 páginas do livro hoje",
-// 		Date:       locationTime,
-// 	}
-
-// 	task2 := Task{
-// 		ID:         2,
-// 		TaskName:   "Desenvolver",
-// 		TaskDetail: "Desenvolver o app",
-// 		Date:       locationTime,
-// 	}
-
-// 	tasks = append(tasks, task, task2)
-// 	fmt.Println(tasks)
-// }
-
 func (s *APIServer) Run() {
 	router := mux.NewRouter()
 
 	router.HandleFunc("/", homePage).Methods("GET")
-	router.HandleFunc("/gettasks", getTasks).Methods("GET")
-	router.HandleFunc("/gettask/{id}", getTask).Methods("GET")
+	router.HandleFunc("/tasks", MakeHttpHandlerHelper(s.handleGetTasks))
+	router.HandleFunc("/task/{id}", MakeHttpHandlerHelper(s.handleGetTask))
 	router.HandleFunc("/create", MakeHttpHandlerHelper(s.handleCreateTask))
 	router.HandleFunc("/delete/{id}", deleteTask).Methods("DELETE")
 	router.HandleFunc("/update/{id}", updateTask).Methods("PUT")
@@ -66,43 +40,44 @@ func homePage(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Endpoint da home page")
 }
 
-func getTasks(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Endpoint de getTasks")
+func (s *APIServer) handleGetTasks(w http.ResponseWriter, r *http.Request) error {
 
-	err := WriteJsonHelper(w, http.StatusOK, tasks)
-	if err != nil {
-		fmt.Println("erro passando o JSON => ", err)
-		return
+	if r.Method != "GET" {
+		return fmt.Errorf("Método de request não permitido")
 	}
 
-	return
+	tasks, err := s.store.GetTasks()
+	if err != nil {
+		return fmt.Errorf("Erro ao obter as tarefas %s", err)
+	}
+
+	err = WriteJsonHelper(w, http.StatusOK, tasks)
+	if err != nil {
+		return fmt.Errorf("erro passando o JSON %s", err)
+	}
+
+	return nil
 }
 
-func getTask(w http.ResponseWriter, r *http.Request) {
+func (s *APIServer) handleGetTask(w http.ResponseWriter, r *http.Request) error {
 	fmt.Println("Endpoint da getTask (apenas uma task)")
 
-	taskId := mux.Vars(r)
-	flag := false
-	for i, task := range tasks {
-		if taskId["id"] == fmt.Sprint(tasks[i].ID) {
-			err := WriteJsonHelper(w, http.StatusOK, task)
-			if err != nil {
-				fmt.Println("erro passando o JSON => ", err)
-				return
-			}
-			flag = true
-			break
-		}
+	if r.Method != "GET" {
+		return fmt.Errorf("Método de request não permitido")
 	}
 
-	if flag == false {
-		err := WriteJsonHelper(w, http.StatusBadRequest, map[string]string{"status": "Erro, task não encontrada"})
-		if err != nil {
-			fmt.Println("erro passando o JSON => ", err)
-			return
-		}
+	taskId := mux.Vars(r)
+	task, err := s.store.GetTask(taskId["id"])
+	if err != nil {
+		return err
 	}
-	return
+
+	err = WriteJsonHelper(w, http.StatusOK, task)
+	if err != nil {
+		return fmt.Errorf("erro passando o JSON %s", err)
+	}
+
+	return nil
 }
 
 func (s *APIServer) handleCreateTask(w http.ResponseWriter, r *http.Request) error {
@@ -119,7 +94,7 @@ func (s *APIServer) handleCreateTask(w http.ResponseWriter, r *http.Request) err
 	validate := validator.New()
 	err := validate.Struct(createTaskReq)
 	if err != nil {
-		errMsg := fmt.Errorf("Not all fields were given %s: ", err)
+		errMsg := fmt.Errorf("Não foi fornecido todos os campos %s: ", err)
 		fmt.Println(errMsg)
 		return WriteJsonHelper(w, http.StatusBadRequest, ApiError{Error: errMsg.Error()})
 
