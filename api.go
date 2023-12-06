@@ -29,8 +29,8 @@ func (s *APIServer) Run() {
 	router.HandleFunc("/tasks", MakeHttpHandlerHelper(s.handleGetTasks))
 	router.HandleFunc("/task/{id}", MakeHttpHandlerHelper(s.handleGetTask))
 	router.HandleFunc("/create", MakeHttpHandlerHelper(s.handleCreateTask))
-	router.HandleFunc("/delete/{id}", deleteTask).Methods("DELETE")
-	router.HandleFunc("/update/{id}", updateTask).Methods("PUT")
+	router.HandleFunc("/delete/{id}", MakeHttpHandlerHelper(s.handleDeleteTask))
+	router.HandleFunc("/update/{id}", MakeHttpHandlerHelper(s.updateTask))
 
 	log.Println("Escutando API JSON na porta:", s.listenAddr)
 	http.ListenAndServe(s.listenAddr, router)
@@ -112,10 +112,38 @@ func (s *APIServer) handleCreateTask(w http.ResponseWriter, r *http.Request) err
 	return WriteJsonHelper(w, http.StatusOK, newTask)
 }
 
-func deleteTask(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Endpoint da home page")
+func (s *APIServer) updateTask(w http.ResponseWriter, r *http.Request) error {
+
+	if r.Method != "PUT" {
+		return fmt.Errorf("Método de request não permitido")
+	}
+
+	taskId := mux.Vars(r)["id"]
+	var updatedTask *Task
+	err := json.NewDecoder(r.Body).Decode(&updatedTask)
+	if err != nil {
+		return err
+	}
+
+	afterUpdateTask, err := s.store.UpdateTask(taskId, updatedTask)
+	if err != nil {
+		return err
+	}
+
+	return WriteJsonHelper(w, http.StatusOK, afterUpdateTask)
 }
 
-func updateTask(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Endpoint da home page")
+func (s *APIServer) handleDeleteTask(w http.ResponseWriter, r *http.Request) error {
+
+	if r.Method != "DELETE" {
+		return fmt.Errorf("Método de request não permitido")
+	}
+
+	taskId := mux.Vars(r)["id"]
+	err := s.store.DeleteTask(taskId)
+	if err != nil {
+		return err
+	}
+
+	return WriteJsonHelper(w, http.StatusOK, map[string]string{"Task deletada:": taskId})
 }

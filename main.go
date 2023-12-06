@@ -3,8 +3,6 @@ package main
 import "log"
 
 func main() {
-	// AllTasks()
-
 	store, err := NewPostgresStore()
 	if err != nil {
 		log.Fatal(err)

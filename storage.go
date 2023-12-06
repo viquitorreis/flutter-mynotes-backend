@@ -14,6 +14,8 @@ type Storage interface {
 	CreateTask(*Task) error
 	GetTasks() ([]*Task, error)
 	GetTask(string) (*Task, error)
+	UpdateTask(string, *Task) (*Task, error)
+	DeleteTask(string) error
 }
 
 type PostgresStore struct {
@@ -117,6 +119,53 @@ func (s *PostgresStore) GetTask(id string) (*Task, error) {
 	return nil, notFoundErr
 }
 
+func (s *PostgresStore) UpdateTask(id string, updatedTask *Task) (*Task, error) {
+	brazilTime, err := GetBrazilCurrentTimeHelper()
+	if err != nil {
+		return nil, err
+	}
+
+	query := `update tasks set taskname = $1, taskdetail = $2, updated_at = $3 where id = $4`
+	result, err := s.db.Exec(
+		query,
+		updatedTask.TaskName,
+		updatedTask.TaskDetail,
+		brazilTime,
+		id,
+	)
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if rowsAffected != 1 {
+		return nil, fmt.Errorf("Erro. Quantidade incorreta de linhas atualizadas")
+	}
+
+	afterUpdateTask, err := s.GetTask(id)
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Printf("Task atualizada: %+v\n", afterUpdateTask)
+
+	return updatedTask, nil
+}
+
+func (s *PostgresStore) DeleteTask(id string) error {
+	_, err := s.GetTask(id)
+	if err != nil {
+		return err
+	}
+
+	_, err = s.db.Exec(`delete from tasks where id = $1`, id)
+	if err != nil {
+		return err
+	}
+	fmt.Println("Task deletada com sucesso", id)
+
+	return nil
+}
+
 func ScanIntoTasks(rows *sql.Rows) (*Task, error) {
 	task := &Task{}
 	err := rows.Scan(
@@ -126,6 +175,9 @@ func ScanIntoTasks(rows *sql.Rows) (*Task, error) {
 		&task.CreatedAt,
 		&task.UpdatedAt,
 	)
+	if err != nil {
+		return nil, err
+	}
 
-	return task, err
+	return task, nil
 }
